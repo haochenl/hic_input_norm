@@ -73,14 +73,14 @@ class pairBam(object):
         """
         l = len(site)
         if read.is_unmapped:
-            if read.seq[:l] == site:
+            if read.seq[:l] == site.upper():
                 return True
             else:
                 return False
         else:
-            if not read.is_reverse and read.seq[:l] == site:
+            if not read.is_reverse and read.seq[:l] == site.upper():
                 return True
-            elif read.is_reverse and read.seq[-l:] == site:
+            elif read.is_reverse and read.seq[-l:] == site.upper():
                 return True
             else:
                 return False
@@ -91,13 +91,13 @@ class pairBam(object):
         """
         l = len(site)
         if l == 4:
-            junction = str(site)*2
+            junction = str(site.upper())*2
             if re.search(junction, read.seq):
                 return True
             else:
                 return False
         elif l == 5:
-            junction = _gatc[str(site)[4]] + str(site)[:4] + str(site)
+            junction = _gatc[str(site.upper())[4]] + str(site.upper())[:4] + str(site.upper())
             if re.search(junction, read.seq):
                 return True
             else:
