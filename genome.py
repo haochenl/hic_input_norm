@@ -58,7 +58,7 @@ class reSites(object):
 
     def getREsites(self, site, output_filename):
         """
-        read through the fasta files and generate a table that shows all the fragments. With inputs of the RE site and output filename. RE site has to be upper case.
+        read through the fasta files and generate a table that shows all the fragments. With inputs of the RE site and output filename.
         """
         header = ['index', 'chrom', 'start', 'end']
         out = open(output_filename, 'w')
@@ -75,7 +75,7 @@ class reSites(object):
             f.close()
             start = 0
             while start >= 0:
-                end = seq.find(site, start+1)
+                end = seq.find(site.upper(), start+1)
                 index += 1
                 if end >= 0:
                     out.write(str(index) + '\t' + i + '\t' + str(start+1) + '\t' + str(end) + '\n')

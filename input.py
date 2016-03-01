@@ -12,7 +12,6 @@ class pairBam(object):
     """
     The object will manipulate Hi-C raw sequencing alignment files and generate disired outputs.
     """
-    _cwd = os.getcwd()
     _gatc = {'G': 'C', 'A': 'T', 'T': 'A', 'C': 'G', 'g': 'c', 'a': 't', 't': 'a', 'c': 'g'}
 
     def __init__(self, read1_filename, read2_filename, type='rb'):
@@ -153,39 +152,6 @@ class pairBam(object):
         self.read2.reset()
         itr1 = self.read1.fetch(until_eof=True)
         itr2 = self.read2.fetch(until_eof=True)
-
-    def filterTypeII(self, site):
-        """
-        this method will filter the wrong typeII input based on the signature position and strand info on the distal end.
-        this is only for temporary use, has to be rewrite completely...
-        """
-        self.read1.reset()
-        self.read2.reset()
-        itr1 = self.read1.fetch(until_eof=True)
-        itr2 = self.read2.fetch(until_eof=True)
-        out1 = pysam.AlignmentFile(self.read1_filename+'.filtered', 'wb', template=self.read1)
-        out2 = pysam.AlignmentFile(self.read2_filename+'.filtered', 'wb', template=self.read2)
-        l = len(site)
-        for r1 in itr1:
-            r2 = itr2.next()
-            if r1.qname == r2.qname:
-                if r1.is_unmapped:
-                    if r1.seq[:l] == site:
-                        out1.write(r1)
-                        out2.write(r2)
-                    else:
-                        pass
-                else:
-                    if r2.seq[:l] == site:
-                        out1.write(r1)
-                        out2.write(r2)
-                    else:
-                        pass
-            else:
-                print 'unexpected header unmatch. truncated files.'
-                break
-        out1.close()
-        out2.close()
 
 
 if __name__ == '__main__':
