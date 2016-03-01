@@ -32,6 +32,8 @@ class pairBam(object):
         dist2_output = pysam.AlignmentFile('/'.join(path + [prefix+'.dist.type2.bam']), 'wb', template=self.read2)
         hic1_output = pysam.AlignmentFile('/'.join(path + [prefix+'.hic1.bam']), 'wb', template=self.read1)
         hic2_output = pysam.AlignmentFile('/'.join(path + [prefix+'.hic2.bam']), 'wb', template=self.read2)
+        junk1_output = pysam.AlignmentFile('/'.join(path + [prefix+'.jk1.bam']), 'wb', template=self.read1)
+        junk2_output = pysam.AlignmentFile('/'.join(path + [prefix+'.jk2.bam']), 'wb', template=self.read2)
         for r1 in itr1:
             r2 = itr2.next()
             if r1.qname == r2.qname:
@@ -52,6 +54,9 @@ class pairBam(object):
                     if r2.is_unmapped and self._sigEnd(r2, site) and not self._findJunction(r2, site):
                         sig2_output.write(r2)
                         dist2_output.write(r1)
+                else:
+                    junk1_output.write(r1)
+                    junk2_output.write(r2)
             else:
                 print 'unexpected header unmatch. truncated files.'
                 break
