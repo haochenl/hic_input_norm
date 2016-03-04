@@ -15,25 +15,25 @@ class pairBam(object):
     _gatc = {'G': 'C', 'A': 'T', 'T': 'A', 'C': 'G', 'g': 'c', 'a': 't', 't': 'a', 'c': 'g'}
 
     def __init__(self, read1_filename, read2_filename, type='rb'):
-        self.read1 = pysam.AlignmentFile(read1_filename, type)
-        self.read2 = pysam.AlignmentFile(read2_filename, type)
+        self.read1          = pysam.AlignmentFile(read1_filename, type)
+        self.read2          = pysam.AlignmentFile(read2_filename, type)
         self.read1_filename = read1_filename
         self.read2_filename = read2_filename
-        self.path = '/'.join(self.read1_filename.split('/')[:-1])
+        self.path           = '/'.join(self.read1_filename.split('/')[:-1])
 
     def separatePair(self, site, prefix, cutoff=1000, mapq=30):
         self.read1.reset()
         self.read2.reset()
         itr1 = self.read1.fetch(until_eof=True)
         itr2 = self.read2.fetch(until_eof=True)
-        sig1_output = pysam.AlignmentFile('/'.join([self.path] + [prefix+'.sig.type1.bam']), 'wb', template=self.read1)
-        dist1_output = pysam.AlignmentFile('/'.join([self.path] + [prefix+'.dist.type1.bam']), 'wb', template=self.read2)
-        sig2_output = pysam.AlignmentFile('/'.join([self.path] + [prefix+'.sig.type2.bam']), 'wb', template=self.read1)
-        dist2_output = pysam.AlignmentFile('/'.join([self.path] + [prefix+'.dist.type2.bam']), 'wb', template=self.read2)
-        hic1_output = pysam.AlignmentFile('/'.join([self.path] + [prefix+'.hic1.bam']), 'wb', template=self.read1)
-        hic2_output = pysam.AlignmentFile('/'.join([self.path] + [prefix+'.hic2.bam']), 'wb', template=self.read2)
-        junk1_output = pysam.AlignmentFile('/'.join([self.path] + [prefix+'.jk1.bam']), 'wb', template=self.read1)
-        junk2_output = pysam.AlignmentFile('/'.join([self.path] + [prefix+'.jk2.bam']), 'wb', template=self.read2)
+        sig1_output  = pysam.AlignmentFile(os.path.join(self.path, prefix + '.sig.type1.bam'), 'wb', template=self.read1)
+        dist1_output = pysam.AlignmentFile(os.path.join(self.path, prefix + '.dist.type1.bam'), 'wb', template=self.read2)
+        sig2_output  = pysam.AlignmentFile(os.path.join(self.path, prefix + '.sig.type2.bam'), 'wb', template=self.read1)
+        dist2_output = pysam.AlignmentFile(os.path.join(self.path, prefix + '.dist.type2.bam'), 'wb', template=self.read2)
+        hic1_output  = pysam.AlignmentFile(os.path.join(self.path, prefix + '.hic1.bam'), 'wb', template=self.read1)
+        hic2_output  = pysam.AlignmentFile(os.path.join(self.path, prefix + '.hic2.bam'), 'wb', template=self.read2)
+        junk1_output = pysam.AlignmentFile(os.path.join(self.path, prefix + '.jk1.bam'), 'wb', template=self.read1)
+        junk2_output = pysam.AlignmentFile(os.path.join(self.path, prefix + '.jk2.bam'), 'wb', template=self.read2)
         for r1 in itr1:
             r2 = itr2.next()
             if r1.qname == r2.qname:
