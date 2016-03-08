@@ -159,7 +159,7 @@ class pairBam(object):
         itr2 = self.read2.fetch(until_eof=True)
 
     def combineTypes(self, ):
-    	pass
+        pass
 
 
 if __name__ == '__main__':

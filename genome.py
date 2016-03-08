@@ -5,6 +5,7 @@ __author__ = 'H.L.'
 import sys
 import re
 import os
+from utils import chrSort
 
 class reSites(object):
     """
@@ -24,37 +25,8 @@ class reSites(object):
         for i in range(len(chrs)):
             file_key[chrs[i]] = fa_files[i]
         self.file_key = file_key
-        self.reference_names = self._chrSort(chrs)
+        self.reference_names = chrSort(chrs)
         self.fa_files = [ file_key[i] for i in self.reference_names ]
-
-    def _chrSort(self, files):
-        num2chr = {}
-        others = []
-        chrs = []
-        for i in files:
-            if i.startswith('chr'):
-                digits = i[3:]
-                try:
-                    chrs.append(int(digits))
-                    num2chr[digits] = i
-                except ValueError:
-                    if digits == 'X':
-                        num2chr['23'] = i
-                        chrs.append(23)
-                    elif digits == 'Y':
-                        num2chr['24'] = i
-                        chrs.append(24)
-                    elif digits == 'M':
-                        num2chr['25'] = i
-                        chrs.append(25)
-                    else:
-                        print 'unexpected chromosome name.'
-                        others.append(i)
-            else:
-                others.append(i)
-        others.sort()
-        chrs.sort()
-        return [ num2chr[str(i)] for i in chrs ] + others
 
     def getREsites(self, site, output_filename):
         """
