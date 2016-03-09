@@ -40,11 +40,11 @@ class pairBam(object):
                 if self._getContact(r1, r2, cutoff, mapq):
                     hic1_output.write(r1)
                     hic2_output.write(r2)
-                elif self._typeIcandidate(r1, r2, cutoff, mapq):
-                    if self._sigEnd(r1, site):
+                elif self._typeIcandidate(r1, r2, cutoff):
+                    if self._sigEnd(r1, site) and r2.mapq >= mapq:
                         sig1_output.write(r1)
                         dist1_output.write(r2)
-                    if self._sigEnd(r2, site):
+                    if self._sigEnd(r2, site) and r1.mapq >= mapq:
                         sig1_output.write(r2)
                         dist1_output.write(r1)
                 elif self._typeIIcandidate(r1, r2, mapq):
@@ -106,21 +106,22 @@ class pairBam(object):
             print 'unusual cutting site signature.'
             sys.exit()
 
-    def _typeIcandidate(self, read1, read2, cutoff, mapq):
+    def _typeIcandidate(self, read1, read2, cutoff):
         """
         This method will read through the pair and judge if the pair is a type one input candidate or not, which means they will satisfy all constrains except for the cutting site signature.
+        The typeI criteria is too stingent, shouldn't apply the mapq score for finding type I
         """
         if (not read1.is_unmapped) and (not read2.is_unmapped):
             if read1.reference_id != read2.reference_id:
                 return False
             else:
                 if not read1.is_reverse and read2.is_reverse:
-                    if (read1.mapq >= mapq) and (read2.mapq >= mapq) and (0 <= read2.pos-read1.pos < cutoff):
+                    if 0 <= read2.pos-read1.pos < cutoff: ## should remove the score constrain
                         return True
                     else:
                         return False
                 elif read1.is_reverse and not read2.is_reverse:
-                    if (read1.mapq >= mapq) and (read2.mapq >= mapq) and (0 <= read1.pos-read2.pos < cutoff):
+                    if 0 <= read1.pos-read2.pos < cutoff: ## should remove the score constrain
                         return True
                     else:
                         return False
@@ -149,17 +150,74 @@ class pairBam(object):
         else:
             return False
 
-    def setCutoff(self, fragments_filename, n=10000):
-        """
-        Get n number of alignment pairs and plot the distance sum to RE sites distribution and determine the cutoff to identify input pairs.
-        """
+    def buildTag(self, peaks_forward_file, peaks_reverse_file, eps, output_filename):
+        references = self.read1.references
+        chr_dict = {}
+        step = eps/2
+        for i in range(len(references)):
+            chr_dict[references[i]] = i
+        print 'building bias reference of forward strand...'
+        peaks_forward_dict = self._peaksDict(peaks_forward_file, eps)
+        print 'building bias reference of reverse strand...'
+        peaks_reverse_dict = self._peaksDict(peaks_reverse_file, eps)
         self.read1.reset()
         self.read2.reset()
         itr1 = self.read1.fetch(until_eof=True)
         itr2 = self.read2.fetch(until_eof=True)
+        out = open(output_filename, 'w')
+        print 'writing Hi-C contact pairs with bias info...'
+        for r1 in itr1:
+            r2 = itr2.next()
+            if r1.qname == r2.qname:
+                chr_r1 = references[r1.reference_id]
+                chr_r2 = references[r2.reference_id]
+                pos_r1 = r1.pos
+                pos_r2 = r2.pos
+                if r1.is_reverse:
+                    r1_strand = '-'
+                    r1_bias = self._findBias(chr_dict, peaks_reverse_dict, chr_r1, pos_r1, step)
+                else:
+                    r1_strand = '+'
+                    r1_bias = self._findBias(chr_dict, peaks_forward_dict, chr_r1, pos_r1, step)
+                if r2.is_reverse:
+                    r2_strand = '-'
+                    r2_bias = self._findBias(chr_dict, peaks_reverse_dict, chr_r2, pos_r2, step)
+                else:
+                    r2_strand = '+'
+                    r2_bias = self._findBias(chr_dict, peaks_forward_dict, chr_r2, pos_r2, step)
+                out.write('\t'.join([chr_r1]+[r1_strand]+[str(pos_r1)]+[str(r1_bias)]+[chr_r2]+[r2_strand]+[str(pos_r2)]+[str(r2_bias)])+'\n')
+            else:
+                print 'unexpected header unmatch. truncated files.'
+                break
+        out.close()
 
-    def combineTypes(self, ):
-        pass
+    def _findBias(self, chr_dict, peaks_dict, chr, pos, step):
+        try:
+            bias = peaks_dict[chr_dict[chr]][str(pos/step)]
+        except KeyError:
+            bias = '*'
+        return bias
+
+    def _peaksDict(self, peaks_file, eps):
+        references = self.read1.references
+        step = eps/2
+        chr_dict = {}
+        peaks_dict = []
+        for i in range(len(references)):
+            chr_dict[references[i]] = i
+            peaks_dict.append({})
+        file = open(peaks_file, 'r')
+        line = file.readline().strip().split()
+        while line:
+            chr = line[0]
+            start = int(line[1])
+            end = int(line[2])
+            count = int(line[3])
+            for i in range(start/step - 1, end/step + 2):
+                peaks_dict[chr_dict[chr]][str(i)] = count
+            line = file.readline().strip().split()
+        file.close()
+        return peaks_dict
 
 
 if __name__ == '__main__':
