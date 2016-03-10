@@ -6,6 +6,7 @@ import sys
 import os
 import re
 import pysam
+import utils
 
 
 class pairBam(object):
@@ -150,7 +151,7 @@ class pairBam(object):
         else:
             return False
 
-    def buildTag(self, peaks_forward_file, peaks_reverse_file, eps, output_filename):
+    def buildTagPeaks(self, peaks_forward_file, peaks_reverse_file, eps, output_filename):
         references = self.read1.references
         chr_dict = {}
         step = eps/2
@@ -214,10 +215,61 @@ class pairBam(object):
             end = int(line[2])
             count = int(line[3])
             for i in range(start/step - 1, end/step + 2):
-                peaks_dict[chr_dict[chr]][str(i)] = count
+                peaks_dict[chr_dict[chr]][str(i)] = count*500.0/(end-start)
             line = file.readline().strip().split()
         file.close()
         return peaks_dict
+
+    def buildTagBins(self, bias_filename, bin_size, output_filename):
+        bias_file = utils.callClusters(bias_filename)
+        references = self.read1.references
+        chr_dict = bias_file.buildRefDict()
+        print 'building input hash table for forward strand...'
+        forward_dict = bias_file.buildBiasDict(bias_file.reads_forward, bin_size)
+        print 'building input hash table for reverse strand...'
+        reverse_dict = bias_file.buildBiasDict(bias_file.reads_reverse, bin_size)
+        self.read1.reset()
+        self.read2.reset()
+        itr1 = self.read1.fetch(until_eof=True)
+        itr2 = self.read2.fetch(until_eof=True)
+        out = open(output_filename, 'w')
+        print 'writing Hi-C contact pairs with bias info...'
+        for r1 in itr1:
+            r2 = itr2.next()
+            if r1.qname == r2.qname:
+                chr_r1 = references[r1.reference_id]
+                chr_r2 = references[r2.reference_id]
+                pos_r1 = r1.pos
+                pos_r2 = r2.pos
+                if r1.is_reverse:
+                    r1_strand = '-'
+                    try:
+                        r1_bias = reverse_dict[chr_dict[chr_r1]][str(pos_r1/bin_size)] 
+                    except KeyError:
+                        r1_bias = 0
+                else:
+                    r1_strand = '+'
+                    try:
+                        r1_bias = forward_dict[chr_dict[chr_r1]][str(pos_r1/bin_size)] 
+                    except KeyError:
+                        r1_bias = 0
+                if r2.is_reverse:
+                    r2_strand = '-'
+                    try:
+                        r2_bias = reverse_dict[chr_dict[chr_r2]][str(pos_r2/bin_size)] 
+                    except KeyError:
+                        r1_bias = 0
+                else:
+                    r2_strand = '+'
+                    try:
+                        r2_bias = forward_dict[chr_dict[chr_r2]][str(pos_r2/bin_size)] 
+                    except KeyError:
+                        r1_bias = 0
+                out.write('\t'.join([chr_r1]+[r1_strand]+[str(pos_r1)]+[str(r1_bias)]+[chr_r2]+[r2_strand]+[str(pos_r2)]+[str(r2_bias)])+'\n')
+            else:
+                print 'unexpected header unmatch. truncated files.'
+                break
+        out.close()
 
 
 if __name__ == '__main__':

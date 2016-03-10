@@ -8,34 +8,34 @@ import pysam
 from time import time
 
 #-----------------------------------------------------------------
-class callPeaks(object):
+class callClusters(object):
     """
-    the related input peak calling algorithms. input filename should be sam or bam file.
+    the related input cluster calling algorithms. input filename should be sam or bam file.
     """
     def __init__(self, filename, type='rb'):
         self.filename = filename
         self.path = '/'.join(filename.split('/')[:-1])
-        file = pysam.AlignmentFile(filename, type)
+        self.file = pysam.AlignmentFile(filename, type)
         chrs_forward = {}
         chrs_reverse = {}
-        self.references = chrSort(file.references)
+        self.references = chrSort(self.file.references)
         for ref in self.references:
             chrs_forward[ref] = []
             chrs_reverse[ref] = []
-        itr = file.fetch(until_eof=True)
+        itr = self.file.fetch(until_eof=True)
         t0 = time()
-        print 'start reading file...'
+        print 'start reading input file...'
         for i in itr:
             if i.is_unmapped:
                 print 'unexpected unmapped read'
                 break
             else:
                 if i.is_reverse:
-                    chrs_reverse[file.references[i.reference_id]].append(i.pos)
+                    chrs_reverse[self.references[i.reference_id]].append(i.pos)
                 else:
-                    chrs_forward[file.references[i.reference_id]].append(i.pos)
-        print 'start sorting file...'
-        for ref in file.references:
+                    chrs_forward[self.references[i.reference_id]].append(i.pos)
+        print 'start sorting input file...'
+        for ref in self.references:
             chrs_forward[ref].sort()
             chrs_reverse[ref].sort()
         print 'time spent to read and sort input file:', round((time()-t0)/60, 3), 'mins'
@@ -61,6 +61,50 @@ class callPeaks(object):
                 out_reverse.write('\t'.join([ref] + [str(min(coords))] + [str(max(coords))] + [str(len(coords))]) + '\n')
         out_forward.close()
         out_reverse.close()
+
+    def BINwriteBed(self, bin_size):
+        out_forward = open(os.path.splitext(self.filename)[0]+'.bin%d.forward.bed' % bin_size, 'w')
+        out_reverse = open(os.path.splitext(self.filename)[0]+'.bin%d.reverse.bed' % bin_size, 'w')
+        reference_dict = self.buildRefDict()
+        print 'building input hash table for forward strand...'
+        forward_dict = self.buildBiasDict(self.reads_forward, bin_size)
+        print 'building input hash table for reverse strand...'
+        reverse_dict = self.buildBiasDict(self.reads_reverse, bin_size)
+        for chr in self.references:
+            for key in forward_dict[reference_dict[chr]]:
+                line = '\t'.join([chr] + [str(int(key)*bin_size)] + [str((int(key)+1)*bin_size)] + [str(forward_dict[reference_dict[chr]][key])]) + '\n'
+                out_forward.write(line)
+        for chr in self.references:
+            for key in reverse_dict[reference_dict[chr]]:
+                line = '\t'.join([chr] + [str(int(key)*bin_size)] + [str((int(key)+1)*bin_size)] + [str(reverse_dict[reference_dict[chr]][key])]) + '\n'
+                out_reverse.write(line)
+        out_forward.close()
+        out_reverse.close()
+
+    def buildBiasDict(self, reads, bin_size):
+        bias_dict = []
+        for chr in self.references:
+            chr_reads = reads[chr]
+            chr_dict = {}
+            pointer = 0
+            for i in range(chr_reads[0]/bin_size, chr_reads[-1]/bin_size):
+                count = 0
+                while chr_reads[pointer] < bin_size * (i + 1):
+                    count += 1
+                    pointer += 1
+                chr_dict[str(i)] = count
+            chr_dict[str(chr_reads[-1]/bin_size)] = len(chr_reads[pointer:])
+            bias_dict.append(chr_dict)
+        return bias_dict
+
+    def buildRefDict(self):
+        ref_dict = {}
+        for i in range(len(self.references)):
+            ref_dict[self.references[i]] = i
+        return ref_dict
+
+
+
 
 
 #-----------------------------------------------------------------------
