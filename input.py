@@ -16,6 +16,17 @@ class pairBam(object):
     _gatc = {'G': 'C', 'A': 'T', 'T': 'A', 'C': 'G', 'g': 'c', 'a': 't', 't': 'a', 'c': 'g'}
 
     def __init__(self, read1_filename, read2_filename, type='rb'):
+        """
+        Parameters
+        ----------
+        read1_filename : string
+            read 1 alignment file name
+        read2_filename : string
+            read 2 alignment file name
+        type : string
+            file format of alignmet files
+
+        """
         self.read1          = pysam.AlignmentFile(read1_filename, type)
         self.read2          = pysam.AlignmentFile(read2_filename, type)
         self.read1_filename = read1_filename
@@ -23,6 +34,25 @@ class pairBam(object):
         self.path           = '/'.join(self.read1_filename.split('/')[:-1])
 
     def separatePair(self, site, prefix, cutoff=1000, mapq=30):
+        """
+        separate the paired alignment files into Hi-C contacts, typeI and typeII inputs, and junk files
+
+        Parameters
+        ----------
+        site : string
+            restriction end sequence (4/6 cutters)
+        prefix : string
+            file name prefix of the output
+        cutoff : int
+            distance cutoff separate input and Hi-C contacts
+        mapq : int
+            mapping quality score cutoff
+
+        Returns
+        -------
+        out : bam files
+
+        """
         self.read1.reset()
         self.read2.reset()
         itr1 = self.read1.fetch(until_eof=True)
@@ -35,70 +65,147 @@ class pairBam(object):
         hic2_output  = pysam.AlignmentFile(os.path.join(self.path, prefix + '.hic2.bam'), 'wb', template=self.read2)
         junk1_output = pysam.AlignmentFile(os.path.join(self.path, prefix + '.jk1.bam'), 'wb', template=self.read1)
         junk2_output = pysam.AlignmentFile(os.path.join(self.path, prefix + '.jk2.bam'), 'wb', template=self.read2)
+        total = 0
+        type1 = 0
+        type2 = 0
+        hic   = 0
+        junk  = 0
+        print 'ligation junction formed by the RE is:', self._returnJunction(site)
         for r1 in itr1:
             r2 = itr2.next()
+            total += 1
             if r1.qname == r2.qname:
                 if self._getContact(r1, r2, cutoff, mapq):
+                    hic += 1
                     hic1_output.write(r1)
                     hic2_output.write(r2)
                 elif self._typeIcandidate(r1, r2, cutoff):
-                    if self._sigEnd(r1, site) and r2.mapq >= mapq:
+                    is_r1TypeI = self._sigEnd(r1, site) and r2.mapq >= mapq
+                    is_r2TypeI = self._sigEnd(r2, site) and r1.mapq >= mapq
+                    if is_r1TypeI:
+                        type1 += 1
                         sig1_output.write(r1)
                         dist1_output.write(r2)
-                    if self._sigEnd(r2, site) and r1.mapq >= mapq:
+                    if is_r2TypeI:
+                        type1 += 1
                         sig1_output.write(r2)
                         dist1_output.write(r1)
+                    if not is_r1TypeI and not is_r2TypeI:
+                        junk += 1
+                        junk1_output.write(r1)
+                        junk2_output.write(r2)
                 elif self._typeIIcandidate(r1, r2, mapq):
-                    if r1.is_unmapped and self._sigEnd(r1, site) and not self._findJunction(r1, site):
+                    is_r1TypeII = r1.is_unmapped and self._sigEnd(r1, site) and not self._findJunction(r1, site)
+                    is_r2TypeII = r2.is_unmapped and self._sigEnd(r2, site) and not self._findJunction(r2, site)
+                    if is_r1TypeII:
+                        type2 += 1
                         sig2_output.write(r1)
                         dist2_output.write(r2)
-                    if r2.is_unmapped and self._sigEnd(r2, site) and not self._findJunction(r2, site):
+                    if is_r2TypeII:
+                        type2 += 1
                         sig2_output.write(r2)
                         dist2_output.write(r1)
+                    if not is_r1TypeII and not is_r2TypeII:
+                        junk += 1
+                        junk1_output.write(r1)
+                        junk2_output.write(r2)
                 else:
+                    junk += 1
                     junk1_output.write(r1)
                     junk2_output.write(r2)
             else:
                 print 'unexpected header unmatch. truncated files.'
                 break
+        input = type1 + type2
+        print 'total number of reads processed:', total
+        print 'number of hic contacts:', hic
+        print 'number of input reads:', input
+        print 'number of typeI input reads:', type1
+        print 'number of typeII input reads:', type2
+        print 'number of junk reads:', junk
         sig1_output.close()
         dist1_output.close()
         sig2_output.close()
         dist2_output.close()
         hic1_output.close()
         hic2_output.close()
+        junk1_output.close()
+        junk2_output.close()
 
     def _sigEnd(self, read, site):
         """
-        This method will judge if a read has the cutting site signature
+        This method will judge if a read has the cutting site signature. This method only support regular 4 cutter such as MboI and 6 cutter such as HindIII.
+
+        Parameters
+        ----------
+        read : <pysam.calignmentfile.AlignedSegment>
+            each input read
+        site : string
+            restriction end sequence (4/6 cutters)
+
+        Returns
+        -------
+        out : bool
+
         """
         l = len(site)
-        if read.is_unmapped:
-            if read.seq[:l] == site.upper():
-                return True
+        if l == 4:
+            if read.is_unmapped:
+                if read.seq[:l] == site.upper():
+                    return True
+                else:
+                    return False
             else:
-                return False
+                if not read.is_reverse and read.seq[:l] == site.upper():
+                    return True
+                elif read.is_reverse and read.seq[-l:] == site.upper():
+                    return True
+                else:
+                    return False
+        elif l == 5:
+            site_reverse = self._gatc[site[-1].upper()] + site[:-1].upper()
+            if read.is_unmapped:
+                if read.seq[:l] == site.upper():
+                    return True
+                else:
+                    return False
+            else:
+                if not read.is_reverse and read.seq[:l] == site.upper():
+                    return True
+                elif read.is_reverse and read.seq[-l:] == site_reverse:
+                    return True
+                else:
+                    return False
         else:
-            if not read.is_reverse and read.seq[:l] == site.upper():
-                return True
-            elif read.is_reverse and read.seq[-l:] == site.upper():
-                return True
-            else:
-                return False
+            print 'unusual cutting site signature.'
+            sys.exit()
+
 
     def _findJunction(self, read, site):
         """
         This method only identify ligation junctions generated by regular six cutters and four cutters.
+
+        Parameters:
+        -----------
+        read : <pysam.calignmentfile.AlignedSegment>
+            each input read
+        site : string
+            restriction end sequence (4/6 cutters)
+
+        Returns
+        -------
+        out : bool
+
         """
         l = len(site)
         if l == 4:
-            junction = str(site.upper())*2
+            junction = self._returnJunction(site)
             if re.search(junction, read.seq):
                 return True
             else:
                 return False
         elif l == 5:
-            junction = _gatc[str(site.upper())[4]] + str(site.upper())[:4] + str(site.upper())
+            junction = self._returnJunction(site)
             if re.search(junction, read.seq):
                 return True
             else:
@@ -107,22 +214,60 @@ class pairBam(object):
             print 'unusual cutting site signature.'
             sys.exit()
 
+    def _returnJunction(self, site):
+        """
+        This method only identify ligation junctions generated by regular six cutters and four cutters.
+
+        Parameters
+        ----------
+        site : string
+            restriction end sequence (4/6 cutters)
+
+        Returns
+        -------
+        out : string
+
+        """
+        l = len(site)
+        if l == 4:
+            junction = str(site.upper())*2
+            return junction
+        elif l == 5:
+            junction = self._gatc[str(site.upper())[4]] + str(site.upper())[:4] + str(site.upper())
+            return junction
+        else:
+            print 'unusual cutting site signature.'
+            sys.exit()
+
     def _typeIcandidate(self, read1, read2, cutoff):
         """
         This method will read through the pair and judge if the pair is a type one input candidate or not, which means they will satisfy all constrains except for the cutting site signature.
-        The typeI criteria is too stingent, shouldn't apply the mapq score for finding type I
+
+        Parameters
+        ----------
+        read1 : <pysam.calignmentfile.AlignedSegment>
+            input read 1 
+        read2 : <pysam.calignmentfile.AlignedSegment>
+            input read 2
+        cutoff : int
+            distance cutoff to separate input and Hi-C contacts
+
+        Returns
+        -------
+        out : bool
+
         """
         if (not read1.is_unmapped) and (not read2.is_unmapped):
             if read1.reference_id != read2.reference_id:
                 return False
             else:
                 if not read1.is_reverse and read2.is_reverse:
-                    if 0 <= read2.pos-read1.pos < cutoff: ## should remove the score constrain
+                    if 0 <= read2.pos-read1.pos < cutoff:
                         return True
                     else:
                         return False
                 elif read1.is_reverse and not read2.is_reverse:
-                    if 0 <= read1.pos-read2.pos < cutoff: ## should remove the score constrain
+                    if 0 <= read1.pos-read2.pos < cutoff:
                         return True
                     else:
                         return False
@@ -132,6 +277,23 @@ class pairBam(object):
             return False
 
     def _typeIIcandidate(self, read1, read2, mapq):
+        """
+        This method will read through the pair and judge if the pair is a type one input candidate or not. 5' cutting site signature and ligation junction filtering is to be determined.
+
+        Parameters
+        ----------
+        read1 : <pysam.calignmentfile.AlignedSegment>
+            input read 1
+        read2 : <pysam.calignmentfile.AlignedSegment>
+            input read 2
+        mapq : int
+            mapping quality score cutoff
+
+        Returns
+        -------
+        out : bool
+
+        """
         if read1.is_unmapped and (not read2.is_unmapped) and read2.mapq >= mapq:
             return True
         elif read2.is_unmapped and (not read1.is_unmapped) and read1.mapq >= mapq:
@@ -140,6 +302,25 @@ class pairBam(object):
             return False
 
     def _getContact(self, read1, read2, cutoff, mapq):
+        """
+        This method will read through the pair and judge if the pair is a Hi-C contact
+
+        Parameters
+        ----------
+        read1 : <pysam.calignmentfile.AlignedSegment>
+            input read 1
+        read2 : <pysam.calignmentfile.AlignedSegment>
+            input read 2
+        cutoff : int 
+            distance cutoff to separate input and Hi-C contacts: int
+        mapq : int
+            mapping quality score cutoff: int
+
+        Returns
+        -------
+        out : bool
+
+        """
         if (not read1.is_unmapped) and (not read2.is_unmapped) and (read1.mapq >= mapq) and (read2.mapq >= mapq):
             if read1.reference_id != read2.reference_id:
                 return True
@@ -152,6 +333,25 @@ class pairBam(object):
             return False
 
     def buildTagPeaks(self, peaks_forward_file, peaks_reverse_file, eps, output_filename):
+        """
+        This method gets reference from the input peak bed files on +/- strands and generate contact tag files with bias (input) info
+
+        Parameters
+        ----------
+        peaks_forward_file : string
+            input peak bed file name for forward (+) strand
+        peaks_reverse_file : string
+            input peak bed file name for reverse (-) strand
+        eps : int
+            total flexibility (eps) of peak assignment (same eps if use the dbscan method)
+        output_filename : string
+            output file name of the binary contacts
+
+        Returns
+        -------
+        out : tag file
+
+        """
         references = self.read1.references
         chr_dict = {}
         step = eps/2
@@ -193,6 +393,9 @@ class pairBam(object):
         out.close()
 
     def _findBias(self, chr_dict, peaks_dict, chr, pos, step):
+        """
+        Get the bias (input) info for each Hi-C contact
+        """
         try:
             bias = peaks_dict[chr_dict[chr]][str(pos/step)]
         except KeyError:
@@ -200,6 +403,21 @@ class pairBam(object):
         return bias
 
     def _peaksDict(self, peaks_file, eps):
+        """
+        Generate peak info hash table from the input(bias) bed file
+
+        Parameters
+        ----------
+        peaks_file : string
+            input(bias) bed file (+/- strand)
+        eps: int
+            total flexibility (eps) of peak assignment (same eps if use the dbscan method)
+
+        Returns
+        -------
+        out : dict
+
+        """
         references = self.read1.references
         step = eps/2
         chr_dict = {}
@@ -221,6 +439,23 @@ class pairBam(object):
         return peaks_dict
 
     def buildTagBins(self, bias_filename, bin_size, output_filename):
+        """
+        This method gets reference from the binned input bed files on +/- strands and generate contact tag files with bias (input) info
+
+        Parameters
+        ----------
+        bias_filename : string
+            input(bias) alignment bam file (combined with typeI and typeII)
+        bin_size : int
+            size of the bin for tiling the input(bias) alignment files: int
+        output_filename : string
+            output file name of the binary contacts: string
+
+        Returns
+        -------
+        out : tag file
+
+        """
         bias_file = utils.callClusters(bias_filename)
         references = self.read1.references
         chr_dict = bias_file.buildRefDict()

@@ -12,6 +12,13 @@ class reSites(object):
     Generate restriction enzyme cutting site locations across the reference. With initial input of fasta files directory.
     """
     def __init__(self, ref_fa_path):
+        """
+        Parameters
+        ----------
+        ref_fa_path : string
+            fasta directory which stores fasta files for different chromosomes
+
+        """
         f = os.walk(ref_fa_path).next()
         self.reference_path = f[0]
         fa_files = [ elem for elem in f[2] if os.path.splitext(elem)[1] == '.fa' ]
@@ -30,7 +37,19 @@ class reSites(object):
 
     def getREsites(self, site, output_filename):
         """
-        read through the fasta files and generate a table that shows all the fragments. With inputs of the RE site and output filename.
+        read through the fasta files and generate a table that shows all the fragments.
+        
+        Parameters
+        ----------
+        site : string
+            restriction enzyme site (5' overhang sequence)
+        output_filename : string
+            output file name
+
+        Returns
+        -------
+        out : bed file
+
         """
         header = ['index', 'chrom', 'start', 'end']
         out = open(output_filename, 'w')
@@ -55,13 +74,5 @@ class reSites(object):
                     out.write(str(index) + '\t' + i + '\t' + str(start+1) + '\t' + str(len(seq)) + '\n')
                 start = end
         out.close()
-
-                    
-
-
-                
-            
-
-
 
 

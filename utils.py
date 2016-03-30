@@ -13,6 +13,17 @@ class callClusters(object):
     the related input cluster calling algorithms. input filename should be sam or bam file.
     """
     def __init__(self, filename, type='rb'):
+        """
+        Initialization by reading the alignment file and generating an array where the coordinates which are sorted
+
+        Parameters
+        ----------
+        filename : string
+            sequencing alignment (bam) file
+        type : string
+            alignment file format (by default is bam file)
+
+        """
         self.filename = filename
         self.path = '/'.join(filename.split('/')[:-1])
         self.file = pysam.AlignmentFile(filename, type)
@@ -43,6 +54,21 @@ class callClusters(object):
         self.reads_reverse = chrs_reverse
 
     def DBSCANwriteBed(self, eps, min_samples):
+        """
+        Write the dbscan input(bias) peaks/clusters into bed files for different (+/-) strands
+
+        Parameters
+        ----------
+        eps : int
+            the density based scanning radius
+        min_samples : int
+            the minimum amount of samples in each peak/cluster
+
+        Returns
+        -------
+        out : bed files (coordinates are string sorted)
+
+        """
         out_forward = open(os.path.splitext(self.filename)[0]+'.dbscan_peaks_eps%d_min%d.forward.bed' % (eps, min_samples), 'w')
         out_reverse = open(os.path.splitext(self.filename)[0]+'.dbscan_peaks_eps%d_min%d.reverse.bed' % (eps, min_samples), 'w')
         for ref in self.references:
@@ -63,6 +89,19 @@ class callClusters(object):
         out_reverse.close()
 
     def BINwriteBed(self, bin_size):
+        """
+        Write the binned input(bias) into bed files for different (+/-) strands
+
+        Parameters
+        ----------
+        bin_size : int
+            the binning for tiling the input(bias) reads
+
+        Returns
+        -------
+        out : bed files (coordinates are string sorted)
+        
+        """
         out_forward = open(os.path.splitext(self.filename)[0]+'.bin%d.forward.bed' % bin_size, 'w')
         out_reverse = open(os.path.splitext(self.filename)[0]+'.bin%d.reverse.bed' % bin_size, 'w')
         reference_dict = self.buildRefDict()
@@ -82,6 +121,21 @@ class callClusters(object):
         out_reverse.close()
 
     def buildBiasDict(self, reads, bin_size):
+        """
+        Generate input(bias) reads hash table for Hi-C contact assignment
+
+        Parameters
+        ----------
+        reads : list
+            the input(bias) reads array generated during initialization
+        bin_size : int
+            the binning for tiling the input(bias) reads
+
+        Returns
+        -------
+        out : dict
+
+        """
         bias_dict = []
         for chr in self.references:
             chr_reads = reads[chr]
@@ -98,6 +152,9 @@ class callClusters(object):
         return bias_dict
 
     def buildRefDict(self):
+        """
+        Build hash talbe for chromosome assignment
+        """
         ref_dict = {}
         for i in range(len(self.references)):
             ref_dict[self.references[i]] = i
@@ -113,11 +170,33 @@ class dbscan(object):
     DBSCAN algorithm for one dimensional sorted list
     """
     def __init__(self, sorted_list):
+        """
+        Parameters
+        ----------
+        sorted_list : list
+            sorted input(bias) reads list generated during class callClusters initialization
+
+        """
         self.visited = [0] * len(sorted_list) 
         self.noises = [0] * len(sorted_list) 
         self.sorted_list = sorted_list
         
     def clusters(self, eps, min_samples):
+        """
+        Generated the clusters list of 1D DBSCAN
+
+        Parameters
+        ----------
+        eps : int
+            the density based scanning radius
+        min_samples : int
+            the minimum amount of samples in each peak/cluster
+
+        Returns
+        -------
+        out : list (indeces of the reads in the sorted list)
+
+        """
         clusters = []
         t0 = time()
         for i in range(len(self.sorted_list)):
@@ -135,9 +214,35 @@ class dbscan(object):
         return clusters
 
     def noises(self):
+        """
+        Returns indeces of noise reads in the sorted list
+        """
         return self.noises
 
     def _expandCluster(self, sorted_list, index, neighbors, eps, min_samples, clusters):
+        """
+        Expand from the current candidate sample to generate a DBSCAN cluster
+
+        Parameters
+        ----------
+        sorted_list : list
+            sorted input(bias) reads list generated during class callClusters initialization
+        index : int
+            index of the current candidate sample in the sorted list
+        neighbors : list
+            indeces of neighbors of the current candidate sample returned from the _regionQuery method
+        eps : int
+            the density based scanning radius
+        min_samples : int
+            the minimum amount of samples in each peak/cluster
+        clusters : list
+            list of the clusters found so far
+
+        Returns
+        -------
+        out : list (the next cluster to add)
+
+        """
         C = []
         neighbors_dict = {}
         for i in neighbors:
@@ -168,6 +273,23 @@ class dbscan(object):
         return C
 
     def _regionQuery(self, sorted_list, index, eps):
+        """
+        Find the indeces of the neighbors of a given sample
+
+        Parameters
+        ----------
+        sorted_list : list
+            sorted input(bias) reads list generated during class callClusters initialization
+        index : int
+            index of the givne sample in the sorted list
+        eps : int
+            the density based scanning radius
+
+        Returns
+        -------
+        out : list (indeces of neighbors)
+
+        """
         points = [index]
         plus = index + 1
         minus = index - 1
